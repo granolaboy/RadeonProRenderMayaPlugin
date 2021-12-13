@@ -875,6 +875,10 @@ frw::Shader FireMaya::StandardMaterial::GetShader(Scope& scope)
 		params.param = RPR_MATERIAL_INPUT_UBER_REFLECTION_NORMAL;
 		ApplyNormalMap(params);
 
+		/* [GRANOLA] THROWS AN EXCEPTION
+		
+			RPR_MATERIAL_INPUT_UBER_REFLECTION_DIELECTRIC_REFLECTANCE ? property not found ?
+
 		// check for the external attribute. Its needed for Demo preparation for Hybrid DX12 engine
 		MPlug plug = shaderNode.findPlug("dx12_R0", false);
 
@@ -886,6 +890,7 @@ frw::Shader FireMaya::StandardMaterial::GetShader(Scope& scope)
 		{
 			material.xSetValue(RPR_MATERIAL_INPUT_UBER_REFLECTION_DIELECTRIC_REFLECTANCE, frw::Value(0.5f));
 		}
+		*/
 	}
 	else
 	{
@@ -1013,19 +1018,61 @@ frw::Shader FireMaya::StandardMaterial::GetShader(Scope& scope)
 	{
 		SET_RPRX_VALUE(RPR_MATERIAL_INPUT_UBER_TRANSPARENCY, transparencyLevel);
 	}
-	if (GET_BOOL(normalMapEnable))
-	{
-		frw::Value value = GET_VALUE(normalMap);
-		int type = value.GetNodeType();
-		if (type == frw::ValueTypeNormalMap || type == frw::ValueTypeBumpMap)
-		{
 
-		}
-		else if (type >= 0)
+	// [GRANOLA] NORMAL MAPPING IN MATERIAL SETTINGS
+	NormalMapParams params(scope, material, shaderNode);
+	params.attrUseCommonNormalMap = Attribute::normalMapEnable;
+	params.mapPlug = Attribute::normalMap;
+	params.param = RPR_MATERIAL_INPUT_NORMAL;
+	ApplyNormalMap(params);
+
+	// [GRANOLA] DISPLACEMENT MAPPING
+	if (GET_BOOL(displacementEnable))
+	{
+		frw::Value valueDisplacementMin = GET_VALUE(displacementMin);
+		frw::Value valueDisplacementMax = GET_VALUE(displacementMax);
+		frw::Value valueDisplacementEnableAdaptiveSubdiv = GET_VALUE(displacementEnableAdaptiveSubdiv);
+		frw::Value valueDisplacementASubdivFactor = GET_VALUE(displacementASubdivFactor);
+		frw::Value valueDisplacementSubdiv = GET_VALUE(displacementSubdiv);
+		frw::Value valueDisplacementCreaseWeight = GET_VALUE(displacementCreaseWeight);
+		frw::Value valueDisplacementBoundary = GET_VALUE(displacementBoundary);
+		frw::Value valueDisplacementMap = GET_VALUE(displacementMap);
+
+		if (valueDisplacementMap.IsNode())
 		{
-			ErrorPrint("%s NormalMap: invalid node type %d\n", shaderNode.name().asChar(), value.GetNodeType());
+			material.SetIsDisplacementMapped(true);
+			material.SetDisplacementMap(valueDisplacementMap.GetNode());
+			material.SetDisplacementRange(valueDisplacementMin.GetX(), valueDisplacementMax.GetX());
+			if (valueDisplacementEnableAdaptiveSubdiv.GetBool())
+			{
+				material.SetDisplacementAdaptiveSubdiv(valueDisplacementASubdivFactor.GetX());
+			}
+			else
+			{
+				material.SetDisplacementSubdivision(valueDisplacementSubdiv.GetInt());
+			}
+			material.SetDisplacementCreaseWeight(valueDisplacementCreaseWeight.GetX());
+
+			FireMaya::Displacement::Type b = static_cast<FireMaya::Displacement::Type>(valueDisplacementBoundary.GetInt());
+			if (b == FireMaya::Displacement::kDisplacement_EdgeAndCorner)
+			{
+				material.SetDisplacementBoundaryInteropType(RPR_SUBDIV_BOUNDARY_INTERFOP_TYPE_EDGE_AND_CORNER);
+			}
+			else
+			{
+				material.SetDisplacementBoundaryInteropType(RPR_SUBDIV_BOUNDARY_INTERFOP_TYPE_EDGE_ONLY);
+			}
+		}
+		else
+		{
+			material.SetIsDisplacementMapped(false);
 		}
 	}
+	else
+	{
+		material.SetIsDisplacementMapped(false);
+	}
+
 #endif
 	return material;
 }

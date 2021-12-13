@@ -1,9 +1,12 @@
 [submodule "FireRender.Components"]
 	path = RadeonProRenderSharedComponents
-	url = git@github.com:GPUOpen-LibrariesAndSDKs/RadeonProRenderSharedComponents.git
+	url = git@github.com:granolaboy/RadeonProRenderSharedComponents.git
+	branch = granola
 [submodule "RadeonProRenderSDK"]
 	path = RadeonProRenderSDK
-	url = git@github.com:GPUOpen-LibrariesAndSDKs/RadeonProRenderSDK.git
+	url = git@github.com:granolaboy/RadeonProRenderSDK.git
+	branch = granola
 [submodule "RadeonProImageProcessingSDK"]
 	path = RadeonProImageProcessingSDK
 	url = git@github.com:GPUOpen-LibrariesAndSDKs/RadeonImageFilter.git
+	branch = master

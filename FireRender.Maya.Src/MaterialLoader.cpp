@@ -627,7 +627,56 @@ void ExportMaterials(const std::string& filename, rpr_material_node* materials, 
 	}
 }
 
-bool ImportMaterials(const std::string& filename, std::map<std::string, MaterialNode> &nodes, std::string& materialName)
+void SaveDisplacementMapParam(frw::DisplacementMapParams* dispParams, std::string& name, std::string& type, std::string& value)
+{
+	if (!dispParams)
+		return;
+
+	/*
+
+	bool displacementEnableAdaptiveSubdiv = false;
+	float displacementASubdivFactor = 0.0f;
+	int displacementSubdiv = 4;
+	float displacementCreaseWeight = 0.0f;
+	rpr_subdiv_boundary_interfop_type displacementBoundary = RPR_SUBDIV_BOUNDARY_INTERFOP_TYPE_EDGE_ONLY;
+	frw::Node displacementMap;
+	std::string displacementMapPath;*/
+
+	if (name == "displacementMin")
+	{
+		dispParams->displacementMin = std::stof(value);
+	}
+	else if (name == "displacementMax")
+	{
+		dispParams->displacementMax = std::stof(value);
+	}
+	else if (name == "displacementEnableAdaptiveSubdiv")
+	{
+		dispParams->displacementEnableAdaptiveSubdiv = std::stoi(value) != 0;
+	}
+	else if (name == "displacementASubdivFactor")
+	{
+		dispParams->displacementASubdivFactor = std::stof(value);
+	}
+	else if (name == "displacementSubdiv")
+	{
+		dispParams->displacementSubdiv = std::stoi(value);
+	}
+	else if (name == "displacementCreaseWeight")
+	{
+		dispParams->displacementCreaseWeight = std::stof(value);
+	}
+	else if (name == "displacementBoundary")
+	{
+		dispParams->displacementBoundary = static_cast<rpr_subdiv_boundary_interfop_type>(std::stoi(value));
+	}
+	else if (name == "displacementMap")
+	{
+		dispParams->displacementMapPath = value;
+	}
+}
+
+bool ImportMaterials(const std::string& filename, std::map<std::string, MaterialNode> &nodes, std::string& materialName, frw::DisplacementMapParams** dispParams)
 {
 	XmlReader read(filename);
 	if (!read.isOpen())
@@ -638,6 +687,12 @@ bool ImportMaterials(const std::string& filename, std::map<std::string, Material
 
 	MaterialNode* last_node = nullptr;
 
+	if (dispParams)
+	{
+		*dispParams = nullptr;
+	}
+
+	bool inDisplacementMapping = false;
 	bool root = true;
 	try
 	{
@@ -648,8 +703,10 @@ bool ImportMaterials(const std::string& filename, std::map<std::string, Material
 			{
 				if (node.name == "node")
 				{
+					inDisplacementMapping = false;
+
 					auto name = read.get().atts.at("name");
-					last_node = &(nodes[name]);
+					last_node = &(nodes[name]); // <-- this creates a new MaterialNode
 					last_node->name = name;
 					last_node->type = read.get().atts.at("type");
 					last_node->parsedObject = MObject();
@@ -660,7 +717,7 @@ bool ImportMaterials(const std::string& filename, std::map<std::string, Material
 					// Special handling for input textures: add 2d placement
 					if (last_node->type == "INPUT_TEXTURE")
 					{
-						auto placement = &(nodes[Place2dNodeName]);
+						auto placement = &(nodes[Place2dNodeName]); // <-- create a place2d node
 
 						if (placement->name.empty())
 						{
@@ -677,7 +734,14 @@ bool ImportMaterials(const std::string& filename, std::map<std::string, Material
 					auto param_name = read.get().atts.at("name");
 					auto param_type = read.get().atts.at("type");
 					auto param_value = read.get().atts.at("value");
-					if (last_node != nullptr)
+					if (inDisplacementMapping)
+					{
+						if (dispParams && *dispParams)
+						{
+							SaveDisplacementMapParam(*dispParams, param_name, param_type, param_value);
+						}
+					}
+					else if (last_node != nullptr)
 						last_node->params[param_name] = { param_type, param_value };
 				}
 				else if (node.name == "description")
@@ -695,6 +759,14 @@ bool ImportMaterials(const std::string& filename, std::map<std::string, Material
 						std::cout << "Warning: Invalid API version. Expected " << hex << kVersion << "." << std::endl;
 
 					materialName = node.atts.at("name");
+				}
+				else if (node.name == "displacement")
+				{
+					inDisplacementMapping = true;
+					if (dispParams)
+					{
+						*dispParams = new frw::DisplacementMapParams();
+					}
 				}
 			}
 			read.next();

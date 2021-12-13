@@ -34,7 +34,7 @@ struct MaterialNode
 	bool parsed;
 	bool root;
 
-	bool IsUber (void) const { return type == "UBER"; }
+	bool IsUber (void) const { return type == "UBER" || type == "uberv2"; }
 	bool IsBlend(void) const { return type == "BLEND"; }
 	bool IsDiffuse(void) const { return type == "DIFFUSE"; }
 	bool IsReflective(void) const { return type == "REFLECTION"; }
@@ -47,7 +47,7 @@ struct MaterialNode
 std::string getDirectory(std::string filePath);
 
 void ExportMaterials(const std::string& filename, rpr_material_node* materials, int mat_count);
-bool ImportMaterials(const std::string& filename, std::map<std::string, MaterialNode> &nodes, std::string& materialName);
+bool ImportMaterials(const std::string& filename, std::map<std::string, MaterialNode> &nodes, std::string& materialName, frw::DisplacementMapParams** dispParams);
 
 extern const char* Place2dNodeName;
 

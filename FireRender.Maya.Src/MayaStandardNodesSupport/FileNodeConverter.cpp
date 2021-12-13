@@ -147,6 +147,8 @@ frw::Value MayaStandardNodeConverters::FileNodeConverter::Convert() const
 
 			bool imageHasAlpha = false;
 			
+			/* GRANOLA - fuck all this nonsense
+			* 
 			if (TahoeContext::IsGivenContextRPR2(dynamic_cast<const FireRenderContext*>(m_params.scope.GetIContextInfo())))
 			{
 				MPlug fileHasAlphaPlug = m_params.shaderNode.findPlug("fileHasAlpha");
@@ -173,6 +175,10 @@ frw::Value MayaStandardNodeConverters::FileNodeConverter::Convert() const
 				// Select the real alpha value
 				return frw::Value(imageNode).SelectW();
 			}
+			*/
+
+			// Select Z it's an intensity image map FFS
+			return frw::Value(imageNode).SelectZ();
 		}
 		// In GLTF Export case we don't process outAlpha as in rendering mode because in this case Arithmetic nodes will be produced 
 		// but Hybrid engine doesn't support them

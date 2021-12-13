@@ -26,6 +26,7 @@ limitations under the License.
 
 #include "Context/TahoeContext.h"
 #include "FireRenderUtils.h"
+#include "FireRenderDisplacement.h"
 
 #include <vector>
 #include <set>
@@ -279,7 +280,8 @@ MStatus FireRenderXmlExportCmd::doIt(const MArgList & args)
 			materialNodeRPR,
 			material_name,
 			extraImageData,
-			exportImageUV
+			exportImageUV,
+			shader.GetDisplacementMapParams()
 		);
 	}
 
@@ -461,8 +463,9 @@ MStatus FireRenderXmlImportCmd::doIt(const MArgList & args)
 
 	// Read nodes from .xml
 	std::string materialName;
+	frw::DisplacementMapParams* dispParams = nullptr;
 	nodeGroup.clear();
-	result = ImportMaterials(filePath.asChar(), nodeGroup, materialName) ? MS::kSuccess : MS::kFailure;
+	result = ImportMaterials(filePath.asChar(), nodeGroup, materialName, &dispParams) ? MS::kSuccess : MS::kFailure;
 
 	if (MS::kSuccess == result)
 	{
@@ -505,12 +508,82 @@ MStatus FireRenderXmlImportCmd::doIt(const MArgList & args)
 
 	// Parse nodes
 	// - should traverse the node graph starting from root (Uber material node)
-	parseMaterialNode(rootNode);
+	MObject parsedObject = parseMaterialNode(rootNode);
+
+	loadDisplacementMapParams(parsedObject, dispParams);
+
+	if (dispParams)
+	{
+		delete dispParams;
+	}
 
 	// Success!
 	return MS::kSuccess;
 }
 #endif
+
+void FireRenderXmlImportCmd::loadDisplacementMapParams(MObject shaderNode, frw::DisplacementMapParams* dispParams)
+{
+	if (dispParams)
+	{
+		MFnDependencyNode nodeFn(shaderNode);
+		MString uberName = nodeFn.name();
+
+		MString executeCommand = "setAttr " + uberName + ".displacementEnable 1";
+		MGlobal::executeCommandStringResult(executeCommand);
+
+		executeCommand = "setAttr " + uberName + ".displacementMin " + dispParams->displacementMin;
+		MGlobal::executeCommandStringResult(executeCommand);		
+		
+		executeCommand = "setAttr " + uberName + ".displacementMax " + dispParams->displacementMax;
+		MGlobal::executeCommandStringResult(executeCommand);
+
+		executeCommand = "setAttr " + uberName + ".displacementEnableAdaptiveSubdiv " + dispParams->displacementEnableAdaptiveSubdiv;
+		MGlobal::executeCommandStringResult(executeCommand);
+
+		if (dispParams->displacementASubdivFactor >= 0.001f)
+		{
+			executeCommand = "setAttr " + uberName + ".displacementASubdivFactor " + dispParams->displacementASubdivFactor;
+			MGlobal::executeCommandStringResult(executeCommand);
+		}
+
+		executeCommand = "setAttr " + uberName + ".displacementSubdiv " + dispParams->displacementSubdiv;
+		MGlobal::executeCommandStringResult(executeCommand);
+
+		executeCommand = "setAttr " + uberName + ".displacementCreaseWeight " + dispParams->displacementCreaseWeight;
+		MGlobal::executeCommandStringResult(executeCommand);
+
+		if (dispParams->displacementBoundary == RPR_SUBDIV_BOUNDARY_INTERFOP_TYPE_EDGE_ONLY)
+		{
+			executeCommand = "setAttr " + uberName + ".displacementBoundary " + FireMaya::Displacement::kDisplacement_EdgeOnly;
+		}
+		else
+		{
+			executeCommand = "setAttr " + uberName + ".displacementBoundary " + FireMaya::Displacement::kDisplacement_EdgeAndCorner;
+		}
+		MGlobal::executeCommandStringResult(executeCommand);
+
+		executeCommand = "shadingNode -asTexture RPRTexture";
+		MString texShaderName = MGlobal::executeCommandStringResult(executeCommand);
+		MSelectionList sList;
+		sList.add(texShaderName);
+		MObject texShaderNode;
+		sList.getDependNode(0, texShaderNode);
+		
+		std::map<std::string, Param> params;
+		attachToPlace2dTextureNode(texShaderNode, params);
+
+		MFnDependencyNode texNodeFn(texShaderNode);
+		MString texName = texNodeFn.name();
+
+		executeCommand = "setAttr -type \"string\" " + texName + ".filename " + "\"" + dispParams->displacementMapPath.c_str() + "\"";
+		MGlobal::executeCommandStringResult(executeCommand);
+
+		executeCommand = "connectAttr -f " + texName + ".out " + uberName + ".displacementMap";
+		MGlobal::executeCommandStringResult(executeCommand);
+	}
+}
+
 
 int FireRenderXmlImportCmd::getAttrType(std::string attrTypeStr) {
 	//FR_MATERIAL_NODE_INPUT_TYPE_FLOAT4 0x1
@@ -605,19 +678,23 @@ using setter_func = std::function<void(const std::string&, MFnDependencyNode&, b
 
 static const std::map<std::string, std::tuple<std::string /*plugName*/, setter_func /*func*/>> AttrsSpecialCases =
 {
-	{"diffuse.weight",		{"diffuse",					enableMaterialFlagByAttr	} },
-	{"reflection.weight",	{"reflections",				enableMaterialFlagByAttr	} },
-	{"refraction.weight",	{"refraction",				enableMaterialFlagByAttr	} },
-	{"coating.weight",		{"clearCoat",				enableMaterialFlagByAttr	} },
-	{"emission.weight",		{"emissive",				enableMaterialFlagByAttr	} },
-	{"sss.weight",			{"sssEnable",				enableMaterialFlagByAttr	} },
-	{"transparency",		{"transparencyEnable",		enableMaterialFlagByAttr	} },
-	{"displacement",		{"displacementEnable",		enableMaterialFlagByAttr	} },
-	{"diffuse.normal",		{"useShaderNormal",			disableMaterialFlagByAttr	} },
-	{"reflection.normal",	{"reflectUseShaderNormal",	disableMaterialFlagByAttr	} },
-	{"coating.normal",		{"coatUseShaderNormal",		disableMaterialFlagByAttr	} },
-	{"reflection.ior",		{"reflectMetalness",		setMetallness				} }
+	{"diffuse.weight",			{"diffuse",					enableMaterialFlagByAttr	} },
+	{"reflection.weight",		{"reflections",				enableMaterialFlagByAttr	} },
+	{"refraction.weight",		{"refraction",				enableMaterialFlagByAttr	} },
+	{"coating.weight",			{"clearCoat",				enableMaterialFlagByAttr	} },
+	{"emission.weight",			{"emissive",				enableMaterialFlagByAttr	} },
+	{"sss.weight",				{"sssEnable",				enableMaterialFlagByAttr	} },
+	{"transparency",			{"transparencyEnable",		enableMaterialFlagByAttr	} },
+	{"displacement",			{"displacementEnable",		enableMaterialFlagByAttr	} },
+	{"diffuse.normal",			{"useShaderNormal",			disableMaterialFlagByAttr	} },
+	{"reflection.normal",		{"reflectUseShaderNormal",	disableMaterialFlagByAttr	} },
+	{"coating.normal",			{"coatUseShaderNormal",		disableMaterialFlagByAttr	} },
+	{"reflection.ior",			{"reflectMetalMaterial",	enableMaterialFlagByAttr	} },
+	{"reflection.metalness",	{"reflectMetalMaterial",	enableMaterialFlagByAttr	} }
 };
+
+
+
 
 void ConnectPlugToAttribute(MPlug& outPlug, MPlug& attributePlug, std::string& attrValue)
 {
@@ -814,12 +891,14 @@ void FireRenderXmlImportCmd::parseAttributeParam(MObject shaderNode,
 				return;
 			}
 
+			/*
 			// handle special case for metalness
 			if (attrName == "reflection.ior")
 			{
 				MPlug metallnessPlug = nodeFn.findPlug("reflectMetalness");
 				ConnectPlugToAttribute(outPlug, metallnessPlug, attrValue);
 			}
+			*/
 
 			ConnectPlugToAttribute(outPlug, attributePlug, attrValue);
 
@@ -1201,10 +1280,14 @@ MObject FireRenderXmlImportCmd::loadFireRenderStandardMaterial(std::map<std::str
 	attributeMapper["reflection.weight"] = "reflectWeight";
 	attributeMapper["reflection.roughness"] = "reflectRoughness";
 	attributeMapper["reflection.anisotropy"] = "reflectAnisotropy";
-	attributeMapper["reflection.anistropyRotation"] = "reflectAnisotropyRotation";
+	attributeMapper["reflection.anistropyrotation"] = "reflectAnisotropyRotation";
 	attributeMapper["reflection.mode"] = "reflectMetalMaterial";
 	attributeMapper["reflection.ior"] = "reflectIOR"; // OR "reflectMetalness"
 	attributeMapper["reflection.normal"] = "reflectNormal";
+
+	attributeMapper["reflection.metalness"] = "reflectMetalness";
+	attributeMapper["reflection.ior"] = "reflectIOR";
+	//attributeMapper["reflection.normal"] = "reflectIsFresnelApproximationOn";
 
 	attributeMapper["weights.glossy2diffuse"] = "reflectIOR";
 	attributeMapper["glossy.color"] = "reflectColor";
@@ -1259,6 +1342,8 @@ MObject FireRenderXmlImportCmd::loadFireRenderStandardMaterial(std::map<std::str
 	attributeMapper["sss.multiscatter"] = "multipleScattering";
 	attributeMapper["backscatter.weight"] = "backscatteringWeight";
 	attributeMapper["backscatter.color"] = "backscatteringColor";
+
+	attributeMapper["schlickapprox"] = "backscatteringColor";
 
 	MString materialName = MString(FIRE_RENDER_NODE_PREFIX) + "UberMaterial";
 
@@ -1448,6 +1533,37 @@ int FireRenderXmlImportCmd::getMatType(std::string materialType) {
 	else if (materialType == "DIFFUSE_REFRACTION") { matType = RPR_MATERIAL_NODE_DIFFUSE_REFRACTION; }
 	else if (materialType == "BUMP_MAP") { matType = RPR_MATERIAL_NODE_BUMP_MAP; }
 	else if (materialType == "UBER") { matType = RPR_MATERIAL_NODE_UBERV2; }
+
+	// [granola] Add in all again in lower case and missing types
+	else if (materialType == "diffuse") { matType = RPR_MATERIAL_NODE_DIFFUSE; }
+	else if (materialType == "microfacet") { matType = RPR_MATERIAL_NODE_MICROFACET; }
+	else if (materialType == "reflection") { matType = RPR_MATERIAL_NODE_REFLECTION; }
+	else if (materialType == "refraction") { matType = RPR_MATERIAL_NODE_REFRACTION; }
+	else if (materialType == "microfacet_refraction") { matType = RPR_MATERIAL_NODE_MICROFACET_REFRACTION; }
+	else if (materialType == "transparent") { matType = RPR_MATERIAL_NODE_TRANSPARENT; }
+	else if (materialType == "emissive") { matType = RPR_MATERIAL_NODE_EMISSIVE; }
+	else if (materialType == "ward") { matType = RPR_MATERIAL_NODE_WARD; }
+	else if (materialType == "add") { matType = RPR_MATERIAL_NODE_ADD; }
+	else if (materialType == "blend") { matType = RPR_MATERIAL_NODE_BLEND; }
+	else if (materialType == "arithmetic") { matType = RPR_MATERIAL_NODE_ARITHMETIC; }
+	else if (materialType == "fresnel") { matType = RPR_MATERIAL_NODE_FRESNEL; }
+	else if (materialType == "normal_map") { matType = RPR_MATERIAL_NODE_NORMAL_MAP; }
+	else if (materialType == "image_texture") { matType = RPR_MATERIAL_NODE_IMAGE_TEXTURE; }
+	else if (materialType == "input_texture") { matType = RPR_MATERIAL_NODE_IMAGE_TEXTURE; }
+	else if (materialType == "noise2d_texture") { matType = RPR_MATERIAL_NODE_NOISE2D_TEXTURE; }
+	else if (materialType == "dot_texture") { matType = RPR_MATERIAL_NODE_DOT_TEXTURE; }
+	else if (materialType == "gradient_texture") { matType = RPR_MATERIAL_NODE_GRADIENT_TEXTURE; }
+	else if (materialType == "checker_texture") { matType = RPR_MATERIAL_NODE_CHECKER_TEXTURE; }
+	else if (materialType == "constant_texture") { matType = RPR_MATERIAL_NODE_CONSTANT_TEXTURE; }
+	else if (materialType == "input_lookup") { matType = RPR_MATERIAL_NODE_INPUT_LOOKUP; }
+	else if (materialType == "standard") { matType = RPR_MATERIAL_NODE_UBERV2; }
+	else if (materialType == "blend_value") { matType = RPR_MATERIAL_NODE_BLEND_VALUE; }
+	else if (materialType == "passthrough") { matType = RPR_MATERIAL_NODE_PASSTHROUGH; }
+	else if (materialType == "opennayar") { matType = RPR_MATERIAL_NODE_ORENNAYAR; }
+	else if (materialType == "fresnel_schlick") { matType = RPR_MATERIAL_NODE_FRESNEL_SCHLICK; }
+	else if (materialType == "diffuse_refraction") { matType = RPR_MATERIAL_NODE_DIFFUSE_REFRACTION; }
+	else if (materialType == "bump_map") { matType = RPR_MATERIAL_NODE_BUMP_MAP; }
+	else if (materialType == "uberv2") { matType = RPR_MATERIAL_NODE_UBERV2; }
 
 	return matType;
 }

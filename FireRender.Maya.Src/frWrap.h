@@ -240,7 +240,7 @@ namespace frw
 		ContextParameterRoughnessCap = RPR_CONTEXT_ROUGHNESS_CAP,
 		ContextParameterDisplayGamma = RPR_CONTEXT_DISPLAY_GAMMA,
 		ContextParameterMaterialStackSize = RPR_CONTEXT_MATERIAL_STACK_SIZE,
-		ContextParameterClippingPlane = RPR_CONTEXT_CLIPPING_PLANE,
+		ContextParameterClippingPlane = RPR_CONTEXT_CUTTING_PLANES, //[granola] changed from RPR_CONTEXT_CLIPPING_PLANE,
 		ContextParameterGPU0Name = RPR_CONTEXT_GPU0_NAME,
 		ContextParameterGPU1Name = RPR_CONTEXT_GPU1_NAME,
 		ContextParameterGPU2Name = RPR_CONTEXT_GPU2_NAME,
@@ -3334,6 +3334,21 @@ namespace frw
 		}
 	};
 
+	// [granola] displacement mapping
+	struct DisplacementMapParams
+	{
+		float displacementMin = 0.0f;
+		float displacementMax = 0.0f;
+
+		bool displacementEnableAdaptiveSubdiv = false;
+		float displacementASubdivFactor = 0.0f;
+		int displacementSubdiv = 4;
+		float displacementCreaseWeight = 0.0f;
+		rpr_subdiv_boundary_interfop_type displacementBoundary = RPR_SUBDIV_BOUNDARY_INTERFOP_TYPE_EDGE_ONLY;
+		frw::Node displacementMap;
+		std::string displacementMapPath;
+	};
+
 	// this cannot be used for standard inputs!
 	class Shader : public Node
 	{
@@ -3367,6 +3382,10 @@ namespace frw
 			bool isShadowCatcher = false;
 			ShadowCatcherParams mShadowCatcherParams;
 			bool isReflectionCatcher = false;
+
+			// [granola] displacement mapping
+			bool isDisplacementMapped = false;
+			DisplacementMapParams mDisplacementMapParams;
 		};
 
 	public:
@@ -3426,6 +3445,58 @@ namespace frw
 		{
 			return data().isReflectionCatcher;
 		}
+
+		// [granola] displacement mapping BEGIN
+
+		DisplacementMapParams* GetDisplacementMapParams(void) const
+		{
+			if (data().isDisplacementMapped)
+				return &data().mDisplacementMapParams;
+			else
+				return nullptr;
+		}
+
+		void SetIsDisplacementMapped(bool dmapped)
+		{
+			data().isDisplacementMapped = dmapped;
+		}
+
+		bool IsDisplacementMapped(void) const
+		{
+			return data().isDisplacementMapped;
+		}
+
+		void SetDisplacementMap(frw::Node map)
+		{
+			data().mDisplacementMapParams.displacementMap = map;
+		}
+
+		void SetDisplacementRange(float dispMin, float dispMax)
+		{
+			data().mDisplacementMapParams.displacementMin = dispMin;
+			data().mDisplacementMapParams.displacementMax = dispMax;
+		}
+
+		void SetDisplacementAdaptiveSubdiv(float factor)
+		{
+			data().mDisplacementMapParams.displacementEnableAdaptiveSubdiv = true;
+			data().mDisplacementMapParams.displacementASubdivFactor = factor;
+		}
+		void SetDisplacementSubdivision(int subdiv)
+		{
+			data().mDisplacementMapParams.displacementEnableAdaptiveSubdiv = false;
+			data().mDisplacementMapParams.displacementSubdiv = subdiv;
+		}
+		void SetDisplacementCreaseWeight(float weight)
+		{
+			data().mDisplacementMapParams.displacementCreaseWeight = weight;
+		}
+		void SetDisplacementBoundaryInteropType(rpr_subdiv_boundary_interfop_type bitype)
+		{
+			data().mDisplacementMapParams.displacementBoundary = bitype;
+		}
+
+		// [granola] displacement mapping END
 
 		Shader(DataPtr p)
 		{

@@ -657,7 +657,7 @@ void RPRVolumeAttributes::SetupVolumeFromFile(MObject& node, FireRenderVolumeLoc
 		return;
 
 	// read file and set grids list with grids from file
-	ReadVolumeDataFromFile(filename, gridParams);
+	//[granola] BROKEN WTF ReadVolumeDataFromFile(filename, gridParams);
 
 	// write grid names to array attribute
 	// - get array builder
