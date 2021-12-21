@@ -632,16 +632,6 @@ void SaveDisplacementMapParam(frw::DisplacementMapParams* dispParams, std::strin
 	if (!dispParams)
 		return;
 
-	/*
-
-	bool displacementEnableAdaptiveSubdiv = false;
-	float displacementASubdivFactor = 0.0f;
-	int displacementSubdiv = 4;
-	float displacementCreaseWeight = 0.0f;
-	rpr_subdiv_boundary_interfop_type displacementBoundary = RPR_SUBDIV_BOUNDARY_INTERFOP_TYPE_EDGE_ONLY;
-	frw::Node displacementMap;
-	std::string displacementMapPath;*/
-
 	if (name == "displacementMin")
 	{
 		dispParams->displacementMin = std::stof(value);
@@ -670,10 +660,6 @@ void SaveDisplacementMapParam(frw::DisplacementMapParams* dispParams, std::strin
 	{
 		dispParams->displacementBoundary = static_cast<rpr_subdiv_boundary_interfop_type>(std::stoi(value));
 	}
-	else if (name == "displacementMap")
-	{
-		dispParams->displacementMapPath = value;
-	}
 }
 
 bool ImportMaterials(const std::string& filename, std::map<std::string, MaterialNode> &nodes, std::string& materialName, frw::DisplacementMapParams** dispParams)
@@ -686,6 +672,9 @@ bool ImportMaterials(const std::string& filename, std::map<std::string, Material
 	}
 
 	MaterialNode* last_node = nullptr;
+
+	// [granola] displacement mapping
+	std::string displacementNodeName = "";
 
 	if (dispParams)
 	{
@@ -759,6 +748,11 @@ bool ImportMaterials(const std::string& filename, std::map<std::string, Material
 						std::cout << "Warning: Invalid API version. Expected " << hex << kVersion << "." << std::endl;
 
 					materialName = node.atts.at("name");
+
+					if (node.atts.count("displacement_node"))
+					{
+						displacementNodeName = node.atts.at("displacement_node");
+					}
 				}
 				else if (node.name == "displacement")
 				{
@@ -777,6 +771,12 @@ bool ImportMaterials(const std::string& filename, std::map<std::string, Material
 		cout << "MaterialImport error: " << e.what() << endl;
 		return false;
 	}
+
+	if (dispParams && *dispParams)
+	{
+		(*dispParams)->displacementNodeName = displacementNodeName;
+	}
+
 	return true;
 }
 

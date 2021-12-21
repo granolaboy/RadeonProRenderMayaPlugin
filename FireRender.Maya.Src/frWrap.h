@@ -3346,7 +3346,7 @@ namespace frw
 		float displacementCreaseWeight = 0.0f;
 		rpr_subdiv_boundary_interfop_type displacementBoundary = RPR_SUBDIV_BOUNDARY_INTERFOP_TYPE_EDGE_ONLY;
 		frw::Node displacementMap;
-		std::string displacementMapPath;
+		std::string displacementNodeName;
 	};
 
 	// this cannot be used for standard inputs!

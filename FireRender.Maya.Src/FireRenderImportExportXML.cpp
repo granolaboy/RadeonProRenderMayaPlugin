@@ -256,6 +256,23 @@ MStatus FireRenderXmlExportCmd::doIt(const MArgList & args)
 		if (!success)
 			return MStatus::kFailure;
 		
+		rpr_material_node displacementNodeRPR = nullptr;
+		if (shader.GetDisplacementMapParams())
+		{
+			displacementNodeRPR = shader.GetDisplacementMapParams()->displacementMap.Handle();
+
+			bool success = ParseRPR(
+				displacementNodeRPR,
+				nodeList,
+				folderpath,
+				false,
+				textureParameter,
+				material_name,
+				exportImageUV);
+
+			if (!success)
+				return MStatus::kFailure;
+		}
 
 		std::string curr_material_name;
 		if (std::find(namesUsed.begin(), namesUsed.end(), material_name) == namesUsed.end())
@@ -278,6 +295,7 @@ MStatus FireRenderXmlExportCmd::doIt(const MArgList & args)
 			nodeList,
 			textureParameter,
 			materialNodeRPR,
+			displacementNodeRPR,
 			material_name,
 			extraImageData,
 			exportImageUV,
@@ -510,10 +528,18 @@ MStatus FireRenderXmlImportCmd::doIt(const MArgList & args)
 	// - should traverse the node graph starting from root (Uber material node)
 	MObject parsedObject = parseMaterialNode(rootNode);
 
-	loadDisplacementMapParams(parsedObject, dispParams);
-
 	if (dispParams)
 	{
+		it = nodeGroup.begin();
+		for (; it != nodeGroup.end() && it->second.GetName() != dispParams->displacementNodeName; it++) {}
+		if (nodeGroup.end() != it)
+		{
+			MaterialNode& displacementNode = it->second;
+			MObject parsedDisplacementObject = parseMaterialNode(displacementNode);
+
+			loadDisplacementMapParams(parsedObject, parsedDisplacementObject, dispParams);
+		}
+
 		delete dispParams;
 	}
 
@@ -522,7 +548,7 @@ MStatus FireRenderXmlImportCmd::doIt(const MArgList & args)
 }
 #endif
 
-void FireRenderXmlImportCmd::loadDisplacementMapParams(MObject shaderNode, frw::DisplacementMapParams* dispParams)
+void FireRenderXmlImportCmd::loadDisplacementMapParams(MObject shaderNode, MObject displacementNode, frw::DisplacementMapParams* dispParams)
 {
 	if (dispParams)
 	{
@@ -563,6 +589,14 @@ void FireRenderXmlImportCmd::loadDisplacementMapParams(MObject shaderNode, frw::
 		}
 		MGlobal::executeCommandStringResult(executeCommand);
 
+
+		MFnDependencyNode displacementFn(displacementNode);
+		MString displacementName = displacementFn.name();
+
+		executeCommand = "connectAttr -f " + displacementName + ".out " + uberName + ".displacementMap";
+		MGlobal::executeCommandStringResult(executeCommand);
+
+		/*
 		executeCommand = "shadingNode -asTexture RPRTexture";
 		MString texShaderName = MGlobal::executeCommandStringResult(executeCommand);
 		MSelectionList sList;
@@ -581,6 +615,7 @@ void FireRenderXmlImportCmd::loadDisplacementMapParams(MObject shaderNode, frw::
 
 		executeCommand = "connectAttr -f " + texName + ".out " + uberName + ".displacementMap";
 		MGlobal::executeCommandStringResult(executeCommand);
+		*/
 	}
 }
 
@@ -689,7 +724,7 @@ static const std::map<std::string, std::tuple<std::string /*plugName*/, setter_f
 	{"diffuse.normal",			{"useShaderNormal",			disableMaterialFlagByAttr	} },
 	{"reflection.normal",		{"reflectUseShaderNormal",	disableMaterialFlagByAttr	} },
 	{"coating.normal",			{"coatUseShaderNormal",		disableMaterialFlagByAttr	} },
-	{"reflection.ior",			{"reflectMetalMaterial",	enableMaterialFlagByAttr	} },
+	{"reflection.ior",			{"reflectMetalness",		setMetallness	} },
 	{"reflection.metalness",	{"reflectMetalMaterial",	enableMaterialFlagByAttr	} }
 };
 
@@ -891,14 +926,12 @@ void FireRenderXmlImportCmd::parseAttributeParam(MObject shaderNode,
 				return;
 			}
 
-			/*
 			// handle special case for metalness
 			if (attrName == "reflection.ior")
 			{
 				MPlug metallnessPlug = nodeFn.findPlug("reflectMetalness");
 				ConnectPlugToAttribute(outPlug, metallnessPlug, attrValue);
 			}
-			*/
 
 			ConnectPlugToAttribute(outPlug, attributePlug, attrValue);
 

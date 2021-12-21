@@ -109,7 +109,7 @@ public:
 	MObject loadFireRenderPassthroughNode(std::map<std::string, Param> &params);
 	MObject loadFireRenderBumpNode(std::map<std::string, Param> &params);
 
-	void loadDisplacementMapParams(MObject uberShader, frw::DisplacementMapParams* dispParams);
+	void loadDisplacementMapParams(MObject uberShader, MObject displacementShader, frw::DisplacementMapParams* dispParams);
 
 	int getMatType(std::string attrType);
 	MObject parseMaterialNode(MaterialNode &matNode);
